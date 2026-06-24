@@ -1,0 +1,20 @@
+title: Process Executing From Temporary Directory
+id: siembox-proc-temp-exec
+status: experimental
+description: A process is running from a world-writable temporary directory, a common malware staging location.
+author: SIEMBox EDR
+level: high
+tags:
+  - attack.execution
+  - attack.t1059
+logsource:
+  product: linux
+  category: process_creation
+detection:
+  selection:
+    query: processes
+    path|startswith:
+      - '/tmp/'
+      - '/var/tmp/'
+      - '/dev/shm/'
+  condition: selection

@@ -25,13 +25,15 @@ Phased build (see `docs/EDR_API.md` for the wire contract):
 - [x] **Phase 2 — vulnerability scanning**: Grype integration (runs the bundled
   `grype` binary, parses JSON, maps to the SIEMBox vuln model, ships findings;
   initial scan on startup + on schedule).
-- [ ] **Phase 3 — detection** (bundled osquery + `sigma-go` + default rules).
+- [x] **Phase 3 — detection**: osquery telemetry + `sigma-go` evaluation. The
+  agent drives `osqueryd` with a scheduled query pack, tails the results, and
+  evaluates each row against an embedded default Sigma rule pack plus any rules
+  the server pushes; matches ship as detections.
 - [ ] **Phase 4 — packaging & hardening** (goreleaser installers, service
   install, secure key storage).
 
-The detection module currently ships as a no-op implementation behind a stable
-interface (`internal/detect`); the agent already runs end-to-end, reports
-inventory, and scans for vulnerabilities.
+The agent runs end-to-end: it enrolls, reports inventory, scans for
+vulnerabilities, and detects suspicious host activity.
 
 ### Vulnerability scanning
 
@@ -40,6 +42,19 @@ alongside the agent by the installer; auto-installs its own CVE database on
 first run). If `grype` is not found on `PATH`, vuln scanning is skipped and the
 rest of the agent still runs. Configure via `grype_binary` and
 `vuln_scan_target` in `agent.json` (defaults: `grype`, `dir:/`).
+
+### Detection
+
+The agent drives [`osquery`](https://osquery.io) (`osqueryd`, also shipped by
+the installer) with a small cross-platform scheduled query pack
+(`internal/telemetry/osquery`), tails its results, and evaluates each row
+against [Sigma](https://github.com/SigmaHQ/sigma) rules using
+[`sigma-go`](https://github.com/bradleyjkemp/sigma-go). An embedded default rule
+pack lives in `internal/detect/rules/` and is always active; the SIEMBox server
+can push additional rules via the agent config. Matches are shipped as
+detections to `/api/edr/events` and land in SIEMBox's existing alerts. If
+`osqueryd` is not found on `PATH`, detection is skipped and the rest of the
+agent still runs. Configure the binary via `osquery_binary` in `agent.json`.
 
 ## How it talks to SIEMBox
 

@@ -30,6 +30,9 @@ type Settings struct {
 	// VulnScanTarget is the grype source to scan. Empty defaults to "dir:/"
 	// (catalog the host's installed packages).
 	VulnScanTarget string `json:"vuln_scan_target,omitempty"`
+	// OsqueryBinary is the osqueryd executable to use (name on PATH or absolute
+	// path). Empty defaults to "osqueryd".
+	OsqueryBinary string `json:"osquery_binary,omitempty"`
 }
 
 // Identity is the persisted result of enrollment.
