@@ -1,0 +1,25 @@
+title: Potential Reverse Shell Command Line
+id: siembox-revshell-cmdline
+status: experimental
+description: A process command line contains patterns commonly used to establish a reverse shell.
+author: SIEMBox EDR
+level: critical
+tags:
+  - attack.execution
+  - attack.t1059
+logsource:
+  product: linux
+  category: process_creation
+detection:
+  selection:
+    query: processes
+  patterns:
+    cmdline|contains:
+      - '/dev/tcp/'
+      - 'bash -i'
+      - 'sh -i'
+      - 'nc -e'
+      - 'ncat -e'
+      - 'socket.connect'
+      - 'pty.spawn'
+  condition: selection and patterns

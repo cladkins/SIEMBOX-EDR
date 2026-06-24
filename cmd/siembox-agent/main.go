@@ -16,6 +16,8 @@ import (
 
 	"github.com/cladkins/siembox-edr/internal/agent"
 	"github.com/cladkins/siembox-edr/internal/config"
+	"github.com/cladkins/siembox-edr/internal/detect"
+	"github.com/cladkins/siembox-edr/internal/telemetry/osquery"
 	"github.com/cladkins/siembox-edr/internal/transport"
 	"github.com/cladkins/siembox-edr/internal/version"
 	"github.com/cladkins/siembox-edr/internal/vuln"
@@ -79,7 +81,19 @@ func run(dir string, log *slog.Logger) error {
 		log.Warn("grype not found on PATH; vulnerability scanning disabled (install grype to enable)")
 	}
 
-	// Future phase swaps NoopEngine for osquery+Sigma via a.WithEngine(...).
+	// Detection: drive osquery telemetry through the Sigma engine when osqueryd
+	// is available, otherwise leave the noop engine in place.
+	osq := osquery.NewDaemon(state.Settings.OsqueryBinary, filepath.Join(dir, "osquery"), nil)
+	if osq.Available() {
+		base, err := detect.DefaultRules()
+		if err != nil {
+			return fmt.Errorf("load default rules: %w", err)
+		}
+		a.WithEngine(detect.NewSigmaEngine(osq, base, log))
+		log.Info("detection enabled", "engine", "sigma", "default_rules", len(base))
+	} else {
+		log.Warn("osqueryd not found on PATH; detection disabled (install osquery to enable)")
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

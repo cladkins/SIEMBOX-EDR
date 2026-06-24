@@ -1,0 +1,24 @@
+title: Offensive Security Tool Execution
+id: siembox-offensive-tool
+status: experimental
+description: A known offensive, recon, or credential-attack tool was observed running.
+author: SIEMBox EDR
+level: medium
+tags:
+  - attack.discovery
+  - attack.credential_access
+logsource:
+  product: linux
+  category: process_creation
+detection:
+  selection:
+    query: processes
+    name:
+      - nmap
+      - masscan
+      - hydra
+      - hashcat
+      - john
+      - mimikatz
+      - responder
+  condition: selection
