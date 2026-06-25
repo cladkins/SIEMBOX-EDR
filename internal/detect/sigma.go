@@ -106,7 +106,7 @@ func (e *SigmaEngine) evaluate(ctx context.Context, rec telemetry.Record, out ch
 // resulting detection events. Used by one-shot "check" mode, which needs no
 // telemetry source or server.
 func (e *SigmaEngine) Evaluate(ctx context.Context, records []telemetry.Record) []models.Event {
-	var out []models.Event
+	out := make([]models.Event, 0) // non-nil so JSON marshals to [] not null
 	for _, rec := range records {
 		out = append(out, e.matchRecord(ctx, rec)...)
 	}

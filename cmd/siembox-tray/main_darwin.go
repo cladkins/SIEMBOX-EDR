@@ -107,16 +107,23 @@ func onReady() {
 	}()
 }
 
-// refreshStatus updates the service status line via `siembox-agent status`.
-func refreshStatus() {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+// serviceRunning reports whether the background daemon is running. It detects
+// the process directly (pgrep) rather than asking launchd, because the menu bar
+// runs as the user and cannot query the root LaunchDaemon — which made it
+// misreport a running service as "stopped".
+func serviceRunning() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, agentBinary(), "status").CombinedOutput()
-	state := "unknown"
-	if err == nil {
-		if s := lastLine(string(out)); s != "" {
-			state = s
-		}
+	// Matches the long-running daemon ("siembox-agent … run"), not the
+	// short-lived scan/check invocations or this tray (siembox-tray).
+	return exec.CommandContext(ctx, "pgrep", "-f", "siembox-agent.* run").Run() == nil
+}
+
+// refreshStatus updates the service status line from the real process state.
+func refreshStatus() {
+	state := "stopped"
+	if serviceRunning() {
+		state = "running"
 	}
 	mStatus.SetTitle("Service: " + state)
 }
@@ -174,17 +181,26 @@ func runCheck() {
 }
 
 // controlService runs `siembox-agent <action>` (start/stop) with administrator
-// privileges via the native macOS auth prompt, then refreshes status.
+// privileges via the native macOS auth prompt, then reports the outcome based
+// on the actual process state. launchctl can exit non-zero even when the
+// service ends up in the desired state (e.g. already started), so we judge by
+// reality, not the exit code.
 func controlService(action, progressMsg string) {
 	notify(progressMsg)
-	cmd := shellQuote(agentBinary()) + " " + action
-	if err := runPrivileged(cmd); err != nil {
-		notify(fmt.Sprintf("Failed to %s the service (admin cancelled or error)", action))
-		return
-	}
-	notify("Service " + action + " requested")
-	time.Sleep(time.Second) // give launchd a moment
+	_ = runPrivileged(shellQuote(agentBinary()) + " " + action)
+	time.Sleep(2 * time.Second) // give launchd a moment to settle
+	running := serviceRunning()
 	refreshStatus()
+	switch {
+	case action == "start" && running:
+		notify("Background service started")
+	case action == "start":
+		notify("Could not start the background service (admin cancelled?)")
+	case action == "stop" && !running:
+		notify("Background service stopped")
+	default:
+		notify("Could not stop the background service (admin cancelled?)")
+	}
 }
 
 // configureServer prompts for the server URL + enrollment token and writes
@@ -291,20 +307,3 @@ func notify(msg string) {
 }
 
 func nowStamp() string { return time.Now().Format("15:04:05") }
-
-func lastLine(s string) string {
-	var last string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			if line := s[start:i]; line != "" {
-				last = line
-			}
-			start = i + 1
-		}
-	}
-	if tail := s[start:]; tail != "" {
-		last = tail
-	}
-	return last
-}
