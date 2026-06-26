@@ -229,7 +229,9 @@ func buildConfig(queries []Query) ([]byte, error) {
 // because osquery's FSEvents-based file monitoring is unreliable on macOS
 // without Full Disk Access (it silently delivers no events), whereas an
 // on-demand scan of the watched directories works the same on every OS.
-const yaraScanIntervalSec = 120
+// osquery runs a scheduled query at the END of each interval, so this also
+// bounds how soon a newly-dropped file is detected.
+const yaraScanIntervalSec = 60
 
 // yaraSigGroup is the config-defined signature group the scan references.
 const yaraSigGroup = "siembox"
