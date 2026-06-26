@@ -99,15 +99,15 @@ loop:
 	}
 }
 
-func TestYaraEventFires(t *testing.T) {
+func TestYaraScanFires(t *testing.T) {
 	base, err := DefaultRules()
 	if err != nil {
 		t.Fatal(err)
 	}
 	rec := telemetry.Record{
-		Query:     "yara_events",
+		Query:     "yara_scan",
 		Action:    "added",
-		Columns:   map[string]string{"target_path": "/tmp/dropped.bin", "matches": "SIEMBox_YARA_SelfTest", "count": "1"},
+		Columns:   map[string]string{"path": "/tmp/dropped.bin", "matches": "SIEMBox_YARA_SelfTest", "count": "1"},
 		Timestamp: time.Now(),
 	}
 	e := NewSigmaEngine(fakeSource{}, base, nil)
@@ -124,16 +124,39 @@ func TestYaraEventFires(t *testing.T) {
 		}
 	}
 	if found == nil {
-		t.Fatalf("yara_events record did not fire siembox-yara-file-match; got %d events", len(events))
+		t.Fatalf("yara_scan record did not fire siembox-yara-file-match; got %d events", len(events))
 	}
 	if found.Severity != models.SeverityHigh {
 		t.Errorf("yara match severity = %q, want high", found.Severity)
 	}
-	if found.Source != "osquery:yara_events" {
-		t.Errorf("source = %q, want osquery:yara_events", found.Source)
+	if found.Source != "osquery:yara_scan" {
+		t.Errorf("source = %q, want osquery:yara_scan", found.Source)
 	}
 	if found.Fields["matches"] != "SIEMBox_YARA_SelfTest" {
 		t.Errorf("matches field = %v", found.Fields["matches"])
+	}
+}
+
+func TestYaraScanRemovedDoesNotFire(t *testing.T) {
+	base, err := DefaultRules()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A "removed" differential row (matching file deleted) must not alert.
+	rec := telemetry.Record{
+		Query:     "yara_scan",
+		Action:    "removed",
+		Columns:   map[string]string{"path": "/tmp/dropped.bin", "matches": "SIEMBox_YARA_SelfTest", "count": "1"},
+		Timestamp: time.Now(),
+	}
+	e := NewSigmaEngine(fakeSource{}, base, nil)
+	if err := e.LoadRules(nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range e.Evaluate(context.Background(), []telemetry.Record{rec}) {
+		if ev.RuleID == "siembox-yara-file-match" {
+			t.Fatal("removed yara_scan row should not fire siembox-yara-file-match")
+		}
 	}
 }
 

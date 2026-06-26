@@ -83,8 +83,8 @@ embedded baseline automatically, so the server need only return its own rules;
 an empty body is valid. Auth: agent key (Bearer + `X-Agent-ID`).
 
 The agent calls this only when `yara_rules_version` increases, writes the bundle
-to `<state-dir>/yara/siembox.yar`, and restarts its osquery `yara_events`
-scanning to apply it. Response: `200 OK` with the rule text.
+to `<state-dir>/yara/siembox.yar`, and restarts its osquery YARA scanning to
+apply it. Response: `200 OK` with the rule text.
 
 ### `POST /api/edr/inventory`
 Upsert the endpoint as an **asset** of type `endpoint`. The server maps

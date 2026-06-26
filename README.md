@@ -71,16 +71,19 @@ path), so `check`/detection work under `sudo`/launchd. Configure the binary via
 
 #### YARA file detection
 
-The background service also runs YARA over files as they are created or modified
-in common malware drop / persistence directories (temp dirs, user Downloads,
-local bin, autostart locations — see `DefaultYaraPaths` in
-`internal/telemetry/osquery`). It uses osquery's `yara_events` table backed by a
-signature file the agent materializes to `<state-dir>/yara/siembox.yar`. A small
-baseline rule set is embedded in the binary (so a fresh, offline agent detects on
-day one); the SIEMBox server delivers the full curated rule packs (planned). A
-match becomes a `high` detection event via the `siembox-yara-file-match` Sigma
-rule. YARA detection runs only under the background service (`run`/`start`), not
-the one-shot `check`.
+The background service periodically scans common malware drop / persistence
+directories (temp dirs, user Downloads, local bin, autostart locations — see
+`DefaultYaraPaths` in `internal/telemetry/osquery`) with YARA. It uses osquery's
+on-demand `yara` table (a scheduled scan, every ~2 min) against a signature file
+the agent materializes to `<state-dir>/yara/siembox.yar`. A scheduled scan is
+used rather than the evented `yara_events`/FSEvents file-monitor because the
+latter silently delivers nothing on macOS without Full Disk Access; the scan
+works the same on every OS and needs no special permissions. A small baseline
+rule set is embedded in the binary (so a fresh, offline agent detects on day
+one); the SIEMBox server delivers the full curated rule packs. A match becomes a
+`high` detection event via the `siembox-yara-file-match` Sigma rule. YARA
+detection runs only under the background service (`run`/`start`), not the
+one-shot `check`.
 
 **Self-test:** the embedded baseline includes a harmless rule that matches the
 marker string `SIEMBOX_YARA_SELFTEST`. With the service running, write that
@@ -91,9 +94,8 @@ echo 'SIEMBOX_YARA_SELFTEST' > ~/Downloads/siembox-yara-selftest.txt   # macOS
 echo 'SIEMBOX_YARA_SELFTEST' > /tmp/siembox-yara-selftest.txt          # Linux
 ```
 
-Within ~30s a `siembox-yara-file-match` detection should fire (visible in the
-agent's verbose log, and shipped to SIEMBox once the server side exists). Delete
-the file afterward.
+Within one scan interval (~2 min) a `siembox-yara-file-match` detection fires
+(logged by the running agent and shipped to SIEMBox). Delete the file afterward.
 
 ## How it talks to SIEMBox
 
