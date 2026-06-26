@@ -224,20 +224,33 @@ func buildConfig(queries []Query) ([]byte, error) {
 	return buildConfigWithYara(queries, "", nil)
 }
 
-// yaraEventsQuery drains only actual matches (count > 0) from the evented
-// yara_events table, so every row reaching the detection engine is a real hit.
-// Note: yara_events names the file column "target_path" (the on-demand yara_file
-// table uses "path"); using "path" here makes osquery fail the query with
-// "no such column: path" and silently emit nothing.
-const yaraEventsQuery = "SELECT target_path, matches, count, action, category FROM yara_events WHERE count > 0;"
+// yaraScanIntervalSec is how often (seconds) the YARA directory scan runs. A
+// scheduled on-demand scan is used instead of the evented yara_events table
+// because osquery's FSEvents-based file monitoring is unreliable on macOS
+// without Full Disk Access (it silently delivers no events), whereas an
+// on-demand scan of the watched directories works the same on every OS.
+const yaraScanIntervalSec = 120
 
-// yaraEventsInterval is how often (seconds) buffered yara_events are drained.
-const yaraEventsInterval = 30
+// yaraSigGroup is the config-defined signature group the scan references.
+const yaraSigGroup = "siembox"
+
+// buildYaraScanQuery builds the scheduled query that scans the watched paths
+// with the on-demand yara table. osquery's yara table interprets "%" as a
+// single path level and "%%" as recursive (the same globbing as file_paths), so
+// the FIM-style globs in paths translate directly into LIKE clauses. count>0
+// keeps only matches; differential mode emits each new match once.
+func buildYaraScanQuery(paths []string) string {
+	likes := make([]string, 0, len(paths))
+	for _, p := range paths {
+		likes = append(likes, fmt.Sprintf("path LIKE '%s'", p))
+	}
+	return fmt.Sprintf("SELECT path, matches, count FROM yara WHERE (%s) AND sig_group='%s' AND count > 0;",
+		strings.Join(likes, " OR "), yaraSigGroup)
+}
 
 // buildConfigWithYara renders the osquery config. When yaraSigPath and yaraPaths
-// are set it adds the file_paths (FIM) and yara sections plus a yara_events
-// scheduled query, so changed files in the watched dirs are scanned against the
-// signature file and matches surface as telemetry.
+// are set it registers the signature group and a scheduled "yara_scan" query
+// that scans the watched directories against it, surfacing matches as telemetry.
 func buildConfigWithYara(queries []Query, yaraSigPath string, yaraPaths []string) ([]byte, error) {
 	type sched struct {
 		Query    string `json:"query"`
@@ -259,13 +272,9 @@ func buildConfigWithYara(queries []Query, yaraSigPath string, yaraPaths []string
 	}
 
 	if yaraSigPath != "" && len(yaraPaths) > 0 {
-		schedule["yara_events"] = sched{Query: yaraEventsQuery, Interval: yaraEventsInterval, Snapshot: false}
-		const category = "siembox_yara"
-		const group = "siembox"
-		cfg["file_paths"] = map[string]any{category: yaraPaths}
+		schedule["yara_scan"] = sched{Query: buildYaraScanQuery(yaraPaths), Interval: yaraScanIntervalSec, Snapshot: false}
 		cfg["yara"] = map[string]any{
-			"signatures": map[string]any{group: []string{yaraSigPath}},
-			"file_paths": map[string]any{category: []string{group}},
+			"signatures": map[string]any{yaraSigGroup: []string{yaraSigPath}},
 		}
 	}
 

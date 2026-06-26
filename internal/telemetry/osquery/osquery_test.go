@@ -76,9 +76,9 @@ func TestBuildConfig(t *testing.T) {
 	if q.Query == "" {
 		t.Error("processes query SQL empty")
 	}
-	// Without YARA configured there must be no yara_events query or yara section.
-	if _, ok := parsed.Schedule["yara_events"]; ok {
-		t.Error("yara_events scheduled without YARA configured")
+	// Without YARA configured there must be no yara scan query or yara section.
+	if _, ok := parsed.Schedule["yara_scan"]; ok {
+		t.Error("yara_scan scheduled without YARA configured")
 	}
 }
 
@@ -94,36 +94,35 @@ func TestBuildConfigWithYara(t *testing.T) {
 			Query    string `json:"query"`
 			Interval int    `json:"interval"`
 		} `json:"schedule"`
-		FilePaths map[string][]string `json:"file_paths"`
-		Yara      struct {
+		Yara struct {
 			Signatures map[string][]string `json:"signatures"`
-			FilePaths  map[string][]string `json:"file_paths"`
 		} `json:"yara"`
 	}
 	if err := json.Unmarshal(cfg, &parsed); err != nil {
 		t.Fatalf("config is not valid json: %v", err)
 	}
 
-	ye, ok := parsed.Schedule["yara_events"]
+	ys, ok := parsed.Schedule["yara_scan"]
 	if !ok {
-		t.Fatal("yara_events query missing from schedule")
+		t.Fatal("yara_scan query missing from schedule")
 	}
-	if ye.Interval != yaraEventsInterval {
-		t.Errorf("yara_events interval = %d, want %d", ye.Interval, yaraEventsInterval)
+	if ys.Interval != yaraScanIntervalSec {
+		t.Errorf("yara_scan interval = %d, want %d", ys.Interval, yaraScanIntervalSec)
 	}
-	if !strings.Contains(ye.Query, "yara_events") || !strings.Contains(ye.Query, "count > 0") {
-		t.Errorf("yara_events query unexpected: %q", ye.Query)
+	// Scans the on-demand yara table over each watched path, matches only.
+	if !strings.Contains(ys.Query, "FROM yara ") {
+		t.Errorf("yara_scan should use the on-demand yara table: %q", ys.Query)
 	}
-
-	cat, ok := parsed.FilePaths["siembox_yara"]
-	if !ok || len(cat) != len(paths) {
-		t.Errorf("file_paths category = %v, want %v", cat, paths)
+	if !strings.Contains(ys.Query, "sig_group='siembox'") || !strings.Contains(ys.Query, "count > 0") {
+		t.Errorf("yara_scan query unexpected: %q", ys.Query)
+	}
+	for _, p := range paths {
+		if !strings.Contains(ys.Query, "path LIKE '"+p+"'") {
+			t.Errorf("yara_scan query missing path %q: %s", p, ys.Query)
+		}
 	}
 	if got := parsed.Yara.Signatures["siembox"]; len(got) != 1 || got[0] != sig {
 		t.Errorf("yara signatures = %v, want [%s]", got, sig)
-	}
-	if got := parsed.Yara.FilePaths["siembox_yara"]; len(got) != 1 || got[0] != "siembox" {
-		t.Errorf("yara file_paths mapping = %v, want [siembox]", got)
 	}
 }
 
@@ -133,7 +132,7 @@ func TestBuildConfigWithYaraDisabledWhenNoPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildConfigWithYara: %v", err)
 	}
-	if strings.Contains(string(cfg), "yara_events") {
+	if strings.Contains(string(cfg), "yara_scan") {
 		t.Error("yara should be disabled when no watch paths are given")
 	}
 }

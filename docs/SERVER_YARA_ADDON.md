@@ -70,7 +70,7 @@ Serve the highest-version `rules` from the endpoint.
 1. On heartbeat/config-poll it reads `yara_rules_version`.
 2. If it is higher than the version the agent has applied, it `GET`s the bundle,
    writes it (after its baseline) to `<state-dir>/yara/siembox.yar`, and restarts
-   its osquery `yara_events` scanning so the new signatures take effect.
+   its osquery YARA scanning so the new signatures take effect.
 3. The applied version is persisted client-side, so an unchanged bundle is never
    re-downloaded on restart.
 
