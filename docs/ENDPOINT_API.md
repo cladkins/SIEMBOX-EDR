@@ -133,6 +133,13 @@ stored in the parsed-logs store.
 ```
 Response: `202 Accepted`.
 
+> **YARA detections (`source: "osquery:yara_scan"`)**: the agent excludes its own
+> working files from YARA scanning — the grype CVE database (`…/siembox-endpoint/
+> grype-*/…`, legacy `…/siembox-edr/…`) and the agent state directory. grype's
+> database legitimately embeds exploit/webshell signatures, so without this it
+> would self-trigger the rules. A `yara_scan` detection therefore always refers to
+> a file outside the agent's footprint.
+
 ### `POST /api/edr/vulnerabilities`
 Result of one local vuln scan. Upserted into the existing **vulnerabilities**
 table, linked to the endpoint asset.
