@@ -79,6 +79,26 @@ func defaultRunner(ctx context.Context, name string, args ...string) ([]byte, er
 	return cmd.Output()
 }
 
+// grypeSelfExcludes are glob patterns (grype --exclude) for the agent's own
+// toolchain and working files. grype catalogs binaries and reports CVEs in
+// their embedded dependencies, so without these it flags its own scanner stack
+// — grype/syft/osquery and the agent binaries live in scan targets like
+// /usr/local, /opt, and C:\Program Files\SIEMBox — as host vulnerabilities.
+// Those findings are noise the operator can't act on independently. (The grype
+// vulnerability database itself is a SQLite file and is not cataloged.)
+var grypeSelfExcludes = []string{
+	"**/siembox-endpoint/**", // grype DB cache namespace
+	"**/siembox-edr/**",      // legacy cache namespace (pre-rebrand)
+	"**/SIEMBox/**",          // agent state/install dir (macOS App Support, Windows Program Files\SIEMBox)
+	"**/siembox-agent", "**/siembox-agent.exe",
+	"**/siembox-tray",
+	"**/siembox-uninstall",
+	"**/grype", "**/grype.exe", // the vulnerability scanner itself
+	"**/syft", "**/syft.exe",
+	"**/osqueryd", "**/osqueryd.exe", // detection tooling the agent installs
+	"**/osqueryi", "**/osqueryi.exe",
+}
+
 // ensureGrypeCacheEnv points grype at a cache dir keyed to the running user, so
 // scans from different privilege contexts never collide. Without this, a `sudo`
 // scan creates a root-owned ~/Library/Caches/grype that the user-level menu bar
@@ -130,7 +150,12 @@ func (g *GrypeScanner) Scan(ctx context.Context, agentID string) (models.VulnBat
 		// No -q: grype writes the JSON report to stdout and logs/errors to
 		// stderr, so dropping quiet mode lets us surface the real failure
 		// reason (e.g. a permission/TCC denial) without polluting the JSON.
-		out, err := g.runner(ctx, bin, t, "-o", "json")
+		// --exclude keeps the agent from reporting CVEs in its own toolchain.
+		args := []string{t, "-o", "json"}
+		for _, e := range grypeSelfExcludes {
+			args = append(args, "--exclude", e)
+		}
+		out, err := g.runner(ctx, bin, args...)
 		if err != nil {
 			if stderr := util.StderrText(err); stderr != "" {
 				return models.VulnBatch{}, fmt.Errorf("run grype on %s: %w: %s", t, err, stderr)

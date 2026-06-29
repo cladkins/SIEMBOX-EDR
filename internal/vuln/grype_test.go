@@ -99,6 +99,17 @@ func TestGrypeScanMapsBatch(t *testing.T) {
 	if !wantJSON {
 		t.Errorf("grype not invoked with json output: %v", gotArgs)
 	}
+	// Verify self-exclusions are passed so the agent never reports CVEs in its
+	// own toolchain (grype/syft/osquery + the agent binaries and state dir).
+	var gotGrypeExclude bool
+	for i, a := range gotArgs {
+		if a == "--exclude" && i+1 < len(gotArgs) && gotArgs[i+1] == "**/grype" {
+			gotGrypeExclude = true
+		}
+	}
+	if !gotGrypeExclude {
+		t.Errorf("grype not invoked with self-exclude for **/grype: %v", gotArgs)
+	}
 }
 
 func TestGrypeScanRunnerError(t *testing.T) {
