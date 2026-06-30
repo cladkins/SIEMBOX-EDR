@@ -1,5 +1,7 @@
 # SIEMBox Endpoint
 
+THIS IS AN ALPHA PROJECT USE WITH CAUTION
+
 A lightweight, cross-platform **endpoint agent** for [SIEMBox](https://github.com/cladkins/SIEMBOX).
 It brings endpoint visibility to SIEMBox by doing two jobs and shipping the
 results back for correlation and analysis:
